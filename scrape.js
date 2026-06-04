@@ -11,7 +11,7 @@ const path = require('path');
   const page = await context.newPage();
 
   console.log('Navigating...');
-  await page.goto('https://www.educative.io/module/page/pg03nJFpLmyqpMvNN/10370001/4960980090617856/6098444918325248', {
+  await page.goto('', {
     waitUntil: 'networkidle',
     timeout: 60000,
   });
@@ -33,13 +33,33 @@ const path = require('path');
   const title = lessonHeading?.trim() || await page.title();
   console.log('Title:', title);
 
-  // Minimal DOM cleanup — only remove obvious noise, leave content intact
+  // DOM cleanup — replace Ace Editor widgets with clean code blocks, strip noise
   const { html, removedAltTexts } = await page.evaluate(() => {
+    // Replace each Ace Editor instance with a clean <pre><code> block
+    document.querySelectorAll('.ace_editor').forEach(editor => {
+      const textarea = editor.querySelector('textarea');
+      let code = textarea ? textarea.value.trim() : '';
+      if (!code) {
+        code = [...editor.querySelectorAll('.ace_line')]
+          .map(l => l.innerText)
+          .join('\n');
+      }
+      if (code) {
+        const pre = document.createElement('pre');
+        const codeEl = document.createElement('code');
+        codeEl.textContent = code;
+        pre.appendChild(codeEl);
+        editor.replaceWith(pre);
+      } else {
+        editor.remove();
+      }
+    });
+
     ['script', 'style', 'noscript', 'iframe', 'figcaption'].forEach(tag =>
       document.querySelectorAll(tag).forEach(el => el.remove())
     );
+
     // Remove tracking pixels, SVG placeholders, and educative internal API images
-    // Collect alt texts so we can strip their floating captions in post-processing
     const alts = [];
     document.querySelectorAll('img').forEach(img => {
       const src = img.getAttribute('src') || '';
@@ -122,11 +142,22 @@ const path = require('path');
   // Remove remaining bottom UI nav elements
   markdown = markdown.replace(/\n*(Ask|CompletedCompleted|Completed|Next)\n*/g, '\n');
 
-  // Remove lines that are only symbols/punctuation (escaped breadcrumb artifacts)
+  // Strip Ace Editor artifacts
   markdown = markdown
     .split('\n')
-    .filter(line => !/^\s*[\\>\.\|…]+\s*$/.test(line))
+    .filter(line => {
+      const t = line.trim();
+      if (/^[ה]+$/.test(t)) return false;           // Hebrew height-measurement chars
+      if (/^X{10,}$/.test(t)) return false;          // Scrollbar overflow chars
+      if (/^\d+$/.test(t)) return false;             // Standalone line numbers (gutter)
+      if (/^\s*[\\>\.\|…⋯]+\s*$/.test(t)) return false; // Punctuation-only breadcrumb artifacts
+      if (/^(Ace Editor|Javascript \(babel-node\)|Saved|Run|Terminal|VR Not Connected|Experience in VR|Run Application|Did you find this helpful\?)$/.test(t)) return false;
+      return true;
+    })
     .join('\n');
+
+  // Strip "Your app can be found at:" widget output lines
+  markdown = markdown.replace(/\*\*Your app can be found at:\*\*.*/g, '');
 
   // Collapse 3+ blank lines into 2
   markdown = markdown.replace(/\n{3,}/g, '\n\n').trim();
