@@ -3,14 +3,16 @@ const TurndownService = require('turndown');
 const fs = require('fs');
 const path = require('path');
 
-const START_URL = 'https://www.educative.io/module/page/pg03nJFpLmyqpMvNN/10370001/4960980090617856/5789235676839936';
-const MODULE_SEGMENT = '/module/page/pg03nJFpLmyqpMvNN/10370001/4960980090617856/';
+const START_URL = 'https://www.educative.io/module/page/j2l3BzfZqpPzY3jV0/10370001/4647321667502080/6216576083034112';
+// Derived from START_URL — everything up to (but not including) the final lesson ID.
+// All lesson links in this module share this path prefix.
+const MODULE_SEGMENT = new URL(START_URL).pathname.split('/').slice(0, -1).join('/') + '/';
 const OUT_DIR = path.join(__dirname, 'pages');
 
 if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR);
 
 async function scrapePage(page, url) {
-  await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+  await page.goto(url, { waitUntil: 'load', timeout: 60000 });
 
   await page.evaluate(async () => {
     await new Promise(resolve => {
@@ -149,7 +151,7 @@ async function scrapePage(page, url) {
   // Load start page and extract the full ordered lesson list from the sidebar TOC.
   // This is more reliable than chasing "Next" buttons which can loop or pick wrong links.
   console.log('Loading start page to extract course TOC...');
-  await page.goto(START_URL, { waitUntil: 'networkidle', timeout: 60000 });
+  await page.goto(START_URL, { waitUntil: 'load', timeout: 60000 });
   await page.waitForTimeout(1000);
 
   const allUrls = await page.evaluate((seg) => {
