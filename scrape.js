@@ -34,17 +34,26 @@ const path = require('path');
   console.log('Title:', title);
 
   // Minimal DOM cleanup — only remove obvious noise, leave content intact
-  const html = await page.evaluate(() => {
-    ['script', 'style', 'noscript', 'iframe'].forEach(tag =>
+  const { html, removedAltTexts } = await page.evaluate(() => {
+    ['script', 'style', 'noscript', 'iframe', 'figcaption'].forEach(tag =>
       document.querySelectorAll(tag).forEach(el => el.remove())
     );
-    // Remove tracking pixel images and SVG placeholder images
+    // Remove tracking pixels, SVG placeholders, and educative internal API images
+    // Collect alt texts so we can strip their floating captions in post-processing
+    const alts = [];
     document.querySelectorAll('img').forEach(img => {
       const src = img.getAttribute('src') || '';
-      if (src.startsWith('data:') || /bat\.bing|doubleclick|facebook\.com\/tr/.test(src))
+      if (
+        src.startsWith('data:') ||
+        /bat\.bing|doubleclick|facebook\.com\/tr/.test(src) ||
+        src.includes('/api/collection/')
+      ) {
+        const alt = img.getAttribute('alt');
+        if (alt) alts.push(alt.trim());
         img.remove();
+      }
     });
-    return document.body.innerHTML;
+    return { html: document.body.innerHTML, removedAltTexts: alts };
   });
 
   const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
@@ -55,6 +64,14 @@ const path = require('path');
       node.nodeName === 'A' &&
       (node.getAttribute('href') || '').startsWith('#') &&
       node.textContent.trim() === '#',
+    replacement: () => '',
+  });
+
+  // Skip educative internal API images (and their captions)
+  td.addRule('skip-api-images', {
+    filter: node =>
+      node.nodeName === 'IMG' &&
+      (node.getAttribute('src') || '').includes('/api/collection/'),
     replacement: () => '',
   });
 
@@ -89,8 +106,21 @@ const path = require('path');
   // Remove trailing # from headings (heading anchor artifact, with or without space)
   markdown = markdown.replace(/^(#{1,6} .+?)#\s*$/gm, (_, h) => h.trimEnd());
 
-  // Remove bottom UI nav elements
-  markdown = markdown.replace(/\n*(Ask|CompletedCompleted|Completed|XR Process|Next)\n*/g, '\n');
+  // Fix empty h1 (can happen when h1 text is in a child span removed by DOM cleanup)
+  markdown = markdown.replace(/^# \n/, `# ${title}\n`);
+
+  // Remove floating image caption lines (alt texts of removed images)
+  if (removedAltTexts.length) {
+    const altPattern = new RegExp(`^(${removedAltTexts.map(a => a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`, 'gm');
+    markdown = markdown.replace(altPattern, '');
+  }
+
+  // Truncate at bottom nav — "Backlesson" marks the start of prev/next lesson links
+  const backIdx = markdown.indexOf('\nBacklesson');
+  if (backIdx !== -1) markdown = markdown.slice(0, backIdx);
+
+  // Remove remaining bottom UI nav elements
+  markdown = markdown.replace(/\n*(Ask|CompletedCompleted|Completed|Next)\n*/g, '\n');
 
   // Remove lines that are only symbols/punctuation (escaped breadcrumb artifacts)
   markdown = markdown
