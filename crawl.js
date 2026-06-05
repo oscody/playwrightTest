@@ -3,13 +3,15 @@ const TurndownService = require('turndown');
 const fs = require('fs');
 const path = require('path');
 
-const START_URL = 'https://www.educative.io/module/page/j2l3BzfZqpPzY3jV0/10370001/4647321667502080/6216576083034112';
+const START_URL = process.argv[2];
+if (!START_URL) { console.error('Usage: node crawl.js <url>'); process.exit(1); }
 // Derived from START_URL — everything up to (but not including) the final lesson ID.
 // All lesson links in this module share this path prefix.
 const MODULE_SEGMENT = new URL(START_URL).pathname.split('/').slice(0, -1).join('/') + '/';
-const OUT_DIR = path.join(__dirname, 'pages');
+const courseName = new URL(START_URL).pathname.split('/').filter(Boolean)[1];
+const OUT_DIR = path.join(__dirname, 'pages', courseName);
 
-if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR);
+fs.mkdirSync(OUT_DIR, { recursive: true });
 
 async function scrapePage(page, url) {
   await page.goto(url, { waitUntil: 'load', timeout: 60000 });
@@ -192,6 +194,6 @@ async function scrapePage(page, url) {
     }
   }
 
-  console.log(`\nDone. ${urlsToScrape.length} pages saved to ./pages/`);
+  console.log(`\nDone. ${urlsToScrape.length} pages saved to ./pages/${courseName}/`);
   await browser.close();
 })();
