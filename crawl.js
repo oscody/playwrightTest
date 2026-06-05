@@ -5,10 +5,10 @@ const path = require('path');
 
 const START_URL = process.argv[2];
 if (!START_URL) { console.error('Usage: node crawl.js <url>'); process.exit(1); }
-// Derived from START_URL — everything up to (but not including) the final lesson ID.
-// All lesson links in this module share this path prefix.
-const MODULE_SEGMENT = new URL(START_URL).pathname.split('/').slice(0, -1).join('/') + '/';
-const courseName = new URL(START_URL).pathname.split('/').filter(Boolean)[1];
+const pathParts = new URL(START_URL).pathname.split('/').filter(Boolean);
+// pathParts: ['courses', '<course-name>'] or ['courses', '<course-name>', '<lesson>']
+const courseName = pathParts[1];
+const MODULE_SEGMENT = `/courses/${courseName}/`;
 const OUT_DIR = path.join(__dirname, 'pages', courseName);
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
